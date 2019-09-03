@@ -3,7 +3,7 @@
 ##  Introduction
 The Titanic disaster is part of the popular culture, spawning any number of books, movies and music; it also presents an excellent case study for applying machine learning algorithm to derive insights, both causal and inferential.
 
-In this project, I have focussed on applying multiple machine learning algorithm to the data-set with a goal of reviewing their relative efficacy in predicting the survivors of the Titanic disaster. I have applied 6 different algorithms - 3 parametric and 3 tree-based. The algorithms applied are:
+In this project, I have focussed on applying multiple machine learning algorithm to the given data-set with a goal of reviewing their relative efficacy in predicting the survivors of the Titanic disaster. I have applied 6 different algorithms - 3 parametric and 3 tree-based. The algorithms applied are:
 1.  Un-penalised Logistic Regression with hand-crafted feature engineering
 2.  SVM with different kernels - linear, radial and polynomial
 3.  Neural Network with different architectures - number of hidden layers, number of neurons in each layer
@@ -38,3 +38,6 @@ The third part of my solution applies other parametric learning alogrithms - SVM
 The fourth part of my solution applies tress based learning algorithms - random forest ensemble, bagged tree ensemble and boosted trees ensemble.
 
 For each of the learning algorithm I estimated the test set prediction accuracy and in the final fifth part I use the top 4 performing algorithms - logistic regression with hand-crafted feature engineering, random forest ensemble, bagged trees ensemble and boosted trees ensemble -  to make predictions for the test data-set. We use Kaggle's evaluation engine to get final verified results of the performance of these 4 algorithms.
+
+##  The Directory Structure
+The entire project is available either as a single markdown document `Titanic-Experiments-with-ML-algorithms.md` in the root directory or split into 5 sections, paralleling the discussion above, in the `/scripts` directory. The data, both input and output is in the `/data` directory. Finally the `/RDA` directory contains the RData created and used by the code in both the single document version and the 5-sections version.
