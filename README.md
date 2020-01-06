@@ -41,3 +41,5 @@ For each of the learning algorithm I estimated the test set prediction accuracy 
 
 ##  The Directory Structure
 The entire project is available either as a single markdown document `Titanic-Experiments-with-ML-algorithms.md` in the root directory or split into 5 sections, paralleling the discussion above, in the `/scripts` directory. The data, both input and output is in the `/data` directory. Finally the `/RDA` directory contains the RData created and used by the code in both the single document version and the 5-sections version.
+
+Now including Python codes
