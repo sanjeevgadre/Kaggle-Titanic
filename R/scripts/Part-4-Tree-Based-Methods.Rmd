@@ -1,0 +1,136 @@
+---
+title: "Titanic: Machine Learning from Disaster, Part IV - Tree-based Learning Algo"
+author: "Sanjeev Gadre"
+date: "August 23, 2019"
+output:
+    md_document:
+        toc: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+```{r libraries, echo=FALSE, message=FALSE}
+library(knitr)
+library(dplyr)
+library(randomForest)
+library(gbm)
+library(ROCR)
+
+```
+
+1.  We use the train and test subsets processed earlier.
+2.  We use the *train-validate-test* strategy to estimate test error for a learning algorithm based on such a model
+
+```{r get-data}
+train = readRDS("../RDA/train.Rda")
+m = nrow(train)
+p = ncol(train)-1
+
+```
+
+##  Random Forest
+1.  Since the *random forest* algorithm uses a *bootstrap* sampling strategy, the function `randomforest()` offers an easy built-in way to estimate test error without the need for an explicit *train-test* strategy.
+
+```{r randomforest}
+est.test.err = 0; 
+trees.n = c(100, 500, 2500, 125000)
+for (t in trees.n) {
+    rf.fit = randomForest(Survived ~ ., data = train)
+    test.err = 1-(rf.fit$confusion[1,1]+rf.fit$confusion[2,2])/m
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using a random forest ensemble is", 
+            round(est.test.err/4, digits = 4), sep = " "))
+
+```
+
+## Bagged Trees
+1. Similar strategy to the *random forest* algorithm above
+
+```{r bagging}
+est.test.err = 0; 
+trees.n = c(100, 500, 2500, 12500)
+for (t in trees.n) {
+    rf.fit = randomForest(Survived ~ ., data = train, mtry = p)
+    test.err = 1-(rf.fit$confusion[1,1]+rf.fit$confusion[2,2])/m
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using a bagged forest ensemble is", 
+            round(est.test.err/4, digits = 4), sep = " "))
+```
+
+
+
+##  Boosted Trees
+
+1.  The `gbm()` function requires that the dependent/response variable be numerical. For the train dataset we need to convert `Survived` from `<fct>` to `<int>`.
+2.  For the `gbm()` fit, we need to optimise 3 parameters - number of trees (`n.trees`), depth of each tree (`interaction.depth`) and learning rate (`shrinkage`).
+3.  The optimal value for `n.trees`, in turn, depends on `interaction.depth` and `shrinkage` and for a fit, i.e. specific values of `interaction.depth` and `shrinkage`, can be obtained by setting the parameter `cv.folds > 1`, and then recovering the best value through `gbm.perf()` function.
+4.  For the other two parameters we use grid search, setting *accuracy* as the measure to optimise to.
+5. The `predict.gbm()` function returns the *logit* values for examples and need to be converted to *Probability(Y = 1|x)* by the appropriate transformation
+
+```{r boosted-trees}
+train$Survived = as.numeric(levels(train$Survived))[train$Survived]
+
+depth = 1:4
+alpha = c(0.1, 0.01, 0.001)
+
+est.test.err = 0;
+for (k in 1:5) {
+  set.seed(k)
+  indx = split(sample(1:m, m), f = c(rep("train", 6), rep("cval", 2), rep("test", 2)))
+  
+  bestd = 1; bestalpha = 1; bestcutoff = 0; besttrees.n = 1000; leasterr = 1
+  for (d in depth) {
+    for (a in alpha) {
+        boost.fit = gbm(Survived~., data = train[indx$train,], distribution = "bernoulli", cv.folds = 5,
+                        n.trees = 5000, interaction.depth = d, shrinkage = a, 
+                        class.stratify.cv = TRUE, keep.data = FALSE)
+        trees.n = gbm.perf(boost.fit, plot.it = FALSE, method = "cv")
+        
+        pred = predict(boost.fit, newdata = train[indx$train,], n.trees = trees.n)
+        prob = exp(pred)/(1+exp(pred))
+        
+        pred = prediction(prob, factor(train$Survived[indx$train]))  #   Using the ROCR library
+        perf = performance(pred, measure = "acc")                   #   to decide the best threshold probability
+        max.acc.indx = perf@y.values %>% unlist() %>% which.max()    #   to classify an example as '1'
+        cutoff = perf@x.values %>% unlist() %>% .[max.acc.indx]
+        
+        pred = predict(boost.fit, newdata = train[indx$cval,], n.trees = trees.n)
+        prob = exp(pred)/(1+exp(pred))
+        pred = ifelse(prob < cutoff, 0, 1)
+        err = mean(pred != train$Survived[indx$cval])
+        if (err < leasterr) {
+            leasterr = err
+            bestd = d 
+            bestalpha = a
+            bestcutoff = cutoff
+            besttrees.n = trees.n
+      }
+    }
+  }
+  
+  boost.fit = gbm(Survived~., data = train[indx$train,], distribution = "bernoulli", n.trees = besttrees.n, 
+                  interaction.depth = bestd, shrinkage = bestalpha, keep.data = FALSE)
+  
+  pred = predict(boost.fit, newdata = train[indx$test,], n.trees = besttrees.n)
+  prob = exp(pred)/(1+exp(pred))
+        
+  pred = ifelse(prob < bestcutoff, 0, 1)
+  
+  test.err = mean(pred != train$Survived[indx$test])
+  est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using a boosted tree model is", 
+            round(est.test.err/5, digits = 4), sep = " "))
+
+train$Survived = factor(train$Survived)
+```
+
+
+

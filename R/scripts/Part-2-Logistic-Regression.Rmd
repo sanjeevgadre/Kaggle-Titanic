@@ -1,0 +1,442 @@
+---
+title: "Titanic: Machine Learning from Disaster, Part II - Parametric Learning Algo"
+author: "Sanjeev Gadre"
+date: "August 23, 2019"
+output:
+    md_document:
+        toc: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+```{r libraries, echo=FALSE, message=FALSE}
+library(knitr)
+library(dplyr)
+library(e1071)
+library(ROCR)
+
+```
+
+1.  We use the train and test subsets processed earlier.
+2.  We use the *train-validate-test* strategy to choose the optimal parameters for the different models and then estimate test error for a learning algorithm based on such a model
+
+```{r get-data}
+train = readRDS("../RDA/train.Rda")
+m = nrow(train)
+
+```
+
+##  Logistic Regression with hand-crafted Feature Engineering
+
+1.  We use the *train-test* strategy to estimate the test error. 
+2.  At each pass we will use the p-values of the included features to decide on additional features to be included or engineered.
+3.  We begin with an unpenalised logistic regression that includes all features
+
+```{r logit-1}
+f1 = paste("Survived", "~", ".", sep = "")
+F = as.formula(f1)
+
+est.test.err = 0
+for (k in 1:5) {
+    set.seed(k)
+    indx = sample(1:m, 0.6*m)
+    logit.fit = glm(F, data = train[indx,], family = "binomial") 
+    prob = predict(logit.fit, newdata = train[indx,], type = "response") 
+    pred = ROCR::prediction(prob, train$Survived[indx])
+    perf = performance(pred, measure = "acc") 
+    bestaccindx = perf@y.values %>% unlist() %>% which.max() 
+    bestcutoff = perf@x.values %>% unlist() %>% .[bestaccindx] 
+    
+    prob = predict(logit.fit, newdata = train[-indx,], type = "response") 
+    pred = ifelse(prob < bestcutoff, 0, 1) 
+    test.err = mean(pred != train$Survived[-indx])
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using this logistic fit is", 
+            round(est.test.err/5, digits = 4), sep = " "))
+
+logit.fit = glm(F, data = train, family = "binomial")
+
+summary(logit.fit)
+
+```
+
+1. The p-values for features indicate that `Parch` and `Fare` are not significant to the model. However we do not drop these features at this point.
+2.  We now add engineered features. From the EDA we remember that `Survived` was co-related to `Pclass`, `Sex` and `Embarked`. We add interaction terms including these features to our model.
+
+```{r logit-2}
+f2 = paste(f1, "+Pclass:Sex+Pclass:Embarked+Sex:Embarked", sep = "")
+F = as.formula(f2)
+
+est.test.err = 0
+for (k in 1:5) {
+    set.seed(k)
+    indx = sample(1:m, 0.6*m)
+    logit.fit = glm(F, data = train[indx,], family = "binomial") 
+    prob = predict(logit.fit, newdata = train[indx,], type = "response") 
+    pred = ROCR::prediction(prob, train$Survived[indx]) 
+    perf = performance(pred, measure = "acc") 
+    bestaccindx = perf@y.values %>% unlist() %>% which.max() 
+    bestcutoff = perf@x.values %>% unlist() %>% .[bestaccindx] 
+    
+    prob = predict(logit.fit, newdata = train[-indx,], type = "response") 
+    pred = ifelse(prob < bestcutoff, 0, 1) 
+    test.err = mean(pred != train$Survived[-indx])
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using this logistic fit is", 
+            round(est.test.err/5, digits = 4), sep = " "))
+
+logit.fit = glm(F, data = train, family = "binomial")
+
+summary(logit.fit)
+```
+
+1.  The estimated test error has decreased.
+2.  From the summary we infer:
+    i.  the interaction term `Pclass:Sex` is significant but `Pclass:Embarked` isn't. We make the necessary changes and rerun the model.
+    ii. the term `Embarked` is not significant. However, since we are retaining the interaction term `Sex:Embarked`, we retain the `Embarked` term as well. We also remember from the EDA that the test subset had a noticable difference for `Embarked` from the train subset and that is another reason to retain the term.
+
+```{r logit-3}
+f3 = paste(f1, "+Pclass:Sex+Sex:Embarked", sep = "")
+F = as.formula(f3)
+
+est.test.err = 0
+for (k in 1:5) {
+    set.seed(k)
+    indx = sample(1:m, 0.6*m)
+    logit.fit = glm(F, data = train[indx,], family = "binomial") 
+    prob = predict(logit.fit, newdata = train[indx,], type = "response") 
+    pred = ROCR::prediction(prob, train$Survived[indx]) 
+    perf = performance(pred, measure = "acc") 
+    bestaccindx = perf@y.values %>% unlist() %>% which.max() 
+    bestcutoff = perf@x.values %>% unlist() %>% .[bestaccindx] 
+    
+    prob = predict(logit.fit, newdata = train[-indx,], type = "response") 
+    pred = ifelse(prob < bestcutoff, 0, 1) 
+    test.err = mean(pred != train$Survived[-indx])
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using this logistic fit is", 
+            round(est.test.err/5, digits = 4), sep = " "))
+
+logit.fit = glm(F, data = train, family = "binomial")
+
+summary(logit.fit)
+
+```
+
+1.  The estimated test error has reduced.
+2.  We add a third order interaction terms for the three variables `Pclass`, `Sex`, `Embarked`.
+3.  We also add interaction terms for `Pclass` and `Age` & `Sex` and `Age` as these features are stratified differently.
+
+```{r logit-fit-4}
+f4 = paste(f3, "+Pclass:Sex:Embarked+Pclass:Age+Sex:Age", sep = "")
+F = as.formula(f4)
+
+est.test.err = 0
+for (k in 1:5) {
+    set.seed(k)
+    indx = sample(1:m, 0.6*m)
+    logit.fit = glm(F, data = train[indx,], family = "binomial") 
+    prob = predict(logit.fit, newdata = train[indx,], type = "response") 
+    pred = ROCR::prediction(prob, train$Survived[indx]) 
+    perf = performance(pred, measure = "acc") 
+    bestaccindx = perf@y.values %>% unlist() %>% which.max() 
+    bestcutoff = perf@x.values %>% unlist() %>% .[bestaccindx] 
+    
+    prob = predict(logit.fit, newdata = train[-indx,], type = "response") 
+    pred = ifelse(prob < bestcutoff, 0, 1) 
+    test.err = mean(pred != train$Survived[-indx])
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using this logistic fit is", 
+            round(est.test.err/5, digits = 4), sep = " "))
+
+logit.fit = glm(F, data = train, family = "binomial")
+
+summary(logit.fit)
+```
+
+1.  The estimated test error has increased marginally.
+2.  Of the interaction terms added in the last pass, the third order term has no significance to the quality of fit but the other two do. We drop the third order term and refit the model
+
+```{r logit-fit-5}
+f5 = paste(f3, "+Pclass:Age+Sex:Age", sep = "")
+F = as.formula(f5)
+
+est.test.err = 0
+for (k in 1:5) {
+    set.seed(k)
+    indx = sample(1:m, 0.6*m)
+    logit.fit = glm(F, data = train[indx,], family = "binomial") 
+    prob = predict(logit.fit, newdata = train[indx,], type = "response") 
+    pred = ROCR::prediction(prob, train$Survived[indx]) 
+    perf = performance(pred, measure = "acc") 
+    bestaccindx = perf@y.values %>% unlist() %>% which.max() 
+    bestcutoff = perf@x.values %>% unlist() %>% .[bestaccindx] 
+    
+    prob = predict(logit.fit, newdata = train[-indx,], type = "response") 
+    pred = ifelse(prob < bestcutoff, 0, 1) 
+    test.err = mean(pred != train$Survived[-indx])
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using this logistic fit is", 
+            round(est.test.err/5, digits = 4), sep = " "))
+
+logit.fit = glm(F, data = train, family = "binomial")
+
+summary(logit.fit)
+```
+
+1.  The estimated test error remained same.
+2.  The interaction term `Sex:Embarked` doesn't seem to be significant to the model. So we drop it.
+
+```{r logit-fit-6}
+f6 = paste(f5, "-Sex:Embarked", sep = "")
+F = as.formula(f6)
+
+est.test.err = 0
+for (k in 1:5) {
+    set.seed(k)
+    indx = sample(1:m, 0.6*m)
+    logit.fit = glm(F, data = train[indx,], family = "binomial") 
+    prob = predict(logit.fit, newdata = train[indx,], type = "response") 
+    pred = ROCR::prediction(prob, train$Survived[indx]) 
+    perf = performance(pred, measure = "acc") 
+    bestaccindx = perf@y.values %>% unlist() %>% which.max() 
+    bestcutoff = perf@x.values %>% unlist() %>% .[bestaccindx] 
+    
+    prob = predict(logit.fit, newdata = train[-indx,], type = "response") 
+    pred = ifelse(prob < bestcutoff, 0, 1) 
+    test.err = mean(pred != train$Survived[-indx])
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using this logistic fit is", 
+            round(est.test.err/5, digits = 4), sep = " "))
+
+logit.fit = glm(F, data = train, family = "binomial")
+
+summary(logit.fit)
+
+```
+
+1.  The estimated test error has decreased slightly but all the features in the model except `Fare` and `Parch` are significant to the model. Moreover, `Fare` is a function of `Pclass` and `Embarked`, two terms that are already part of the model. So we will drop `Fare` from the model. 
+2.  Since `Pclass`,`Sex` and `Age` are important predictor of survival, we add interaction terms for `Parch` with these 3 features to investigate the impact on the model quality.
+
+```{r logit-fit-7}
+f7 = paste(f6, "-Fare+Pclass:Parch+Sex:Parch+Age:Parch", sep = "")
+F = as.formula(f7)
+
+est.test.err = 0
+for (k in 1:5) {
+    set.seed(k)
+    indx = sample(1:m, 0.6*m)
+    logit.fit = glm(F, data = train[indx,], family = "binomial") 
+    prob = predict(logit.fit, newdata = train[indx,], type = "response") 
+    pred = ROCR::prediction(prob, train$Survived[indx]) 
+    perf = performance(pred, measure = "acc") 
+    bestaccindx = perf@y.values %>% unlist() %>% which.max() 
+    bestcutoff = perf@x.values %>% unlist() %>% .[bestaccindx] 
+    
+    prob = predict(logit.fit, newdata = train[-indx,], type = "response") 
+    pred = ifelse(prob < bestcutoff, 0, 1) 
+    test.err = mean(pred != train$Survived[-indx])
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using this logistic fit is", 
+            round(est.test.err/5, digits = 4), sep = " "))
+
+logit.fit = glm(F, data = train, family = "binomial")
+
+summary(logit.fit)
+
+```
+
+1.  The estimated test error is reduced to its minimum so far.
+2.  In the latest model the interaction terms `Pclass:Age` and `Sex:Age` are not signifiant to the model. We drop these interaction terms to investigate the impact on the quality.
+
+```{r logit-fit-8}
+f8 = paste(f7, "-Pclass:Age-Sex:Age", sep = "")
+F = as.formula(f8)
+
+est.test.err = 0
+for (k in 1:5) {
+    set.seed(k)
+    indx = sample(1:m, 0.6*m)
+    logit.fit = glm(F, data = train[indx,], family = "binomial") 
+    prob = predict(logit.fit, newdata = train[indx,], type = "response") 
+    pred = ROCR::prediction(prob, train$Survived[indx]) 
+    perf = performance(pred, measure = "acc") 
+    bestaccindx = perf@y.values %>% unlist() %>% which.max() 
+    bestcutoff = perf@x.values %>% unlist() %>% .[bestaccindx] 
+    
+    prob = predict(logit.fit, newdata = train[-indx,], type = "response") 
+    pred = ifelse(prob < bestcutoff, 0, 1) 
+    test.err = mean(pred != train$Survived[-indx])
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using this logistic fit is", 
+            round(est.test.err/5, digits = 4), sep = " "))
+
+logit.fit = glm(F, data = train, family = "binomial")
+
+summary(logit.fit)
+
+```
+
+1.  The estimated test error remains same.
+2.  We now add interaction terms for `SibSp` with `Pclass`, `Age` and `Sex` to investigate the impact on the quality of the model.
+3.  We also add power terms for the two quantitative features `SibSp` and `Age`.
+
+```{r logit-fit-9}
+f9 = paste(f8, "+SibSp:Pclass+SibSp:Age+SibSp:Sex+I(SibSp^2)+I(Age^2)", sep = "")
+F = as.formula(f9)
+
+est.test.err = 0
+for (k in 1:5) {
+    set.seed(k)
+    indx = sample(1:m, 0.6*m)
+    logit.fit = glm(F, data = train[indx,], family = "binomial") 
+    prob = predict(logit.fit, newdata = train[indx,], type = "response") 
+    pred = ROCR::prediction(prob, train$Survived[indx]) 
+    perf = performance(pred, measure = "acc") 
+    bestaccindx = perf@y.values %>% unlist() %>% which.max() 
+    bestcutoff = perf@x.values %>% unlist() %>% .[bestaccindx] 
+    
+    prob = predict(logit.fit, newdata = train[-indx,], type = "response") 
+    pred = ifelse(prob < bestcutoff, 0, 1) 
+    test.err = mean(pred != train$Survived[-indx])
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using this logistic fit is", 
+            round(est.test.err/5, digits = 4), sep = " "))
+
+logit.fit = glm(F, data = train, family = "binomial")
+
+summary(logit.fit)
+
+```
+
+1.  The estimated test error has increased marginally.
+2.  The three interaction terms added are not significant to the model.
+3.  Of the power terms only the `Age^2` term is significant to the model.
+4.  We drop the terms from the previous pass that are not relevant and add multiple power terms for `Age` to investigate impact on the quality of the model.
+
+```{r logit-fit-10}
+f10 = paste(f8, "+poly(Age, 5)", sep = "")
+F = as.formula(f10)
+
+est.test.err = 0
+for (k in 1:5) {
+    set.seed(k)
+    indx = sample(1:m, 0.6*m)
+    logit.fit = glm(F, data = train[indx,], family = "binomial") 
+    prob = predict(logit.fit, newdata = train[indx,], type = "response") 
+    pred = ROCR::prediction(prob, train$Survived[indx]) 
+    perf = performance(pred, measure = "acc") 
+    bestaccindx = perf@y.values %>% unlist() %>% which.max() 
+    bestcutoff = perf@x.values %>% unlist() %>% .[bestaccindx] 
+    
+    prob = predict(logit.fit, newdata = train[-indx,], type = "response") 
+    pred = ifelse(prob < bestcutoff, 0, 1) 
+    test.err = mean(pred != train$Survived[-indx])
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using this logistic fit is", 
+            round(est.test.err/5, digits = 4), sep = " "))
+
+logit.fit = glm(F, data = train, family = "binomial")
+
+summary(logit.fit)
+
+```
+
+1.  The estimated test error has slightly improved.
+2.  More importantly only the 4th order power term for `Age` seems significant to the model.
+3.  We make the necessary changes and refit the model.
+
+```{r logit-fit-11}
+f11 = paste(f8, "+I(Age^4)", sep = "")
+F = as.formula(f11)
+
+est.test.err = 0
+for (k in 1:5) {
+    set.seed(k)
+    indx = sample(1:m, 0.6*m)
+    logit.fit = glm(F, data = train[indx,], family = "binomial") 
+    prob = predict(logit.fit, newdata = train[indx,], type = "response") 
+    pred = ROCR::prediction(prob, train$Survived[indx]) 
+    perf = performance(pred, measure = "acc") 
+    bestaccindx = perf@y.values %>% unlist() %>% which.max() 
+    bestcutoff = perf@x.values %>% unlist() %>% .[bestaccindx] 
+    
+    prob = predict(logit.fit, newdata = train[-indx,], type = "response") 
+    pred = ifelse(prob < bestcutoff, 0, 1) 
+    test.err = mean(pred != train$Survived[-indx])
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using this logistic fit is", 
+            round(est.test.err/5, digits = 4), sep = " "))
+
+logit.fit = glm(F, data = train, family = "binomial")
+
+summary(logit.fit)
+
+```
+
+1.  The estimated test error is unchanged. More importantly, all terms except `Age:Parch` in the model are significant to the quality of the model.
+2.  We drop the non-significant term and rebuild the model.
+
+```{r logit-fit-12}
+f12 = paste(f11, "-Age:Parch", sep = "")
+F = as.formula(f12)
+
+est.test.err = 0
+for (k in 1:5) {
+    set.seed(k)
+    indx = sample(1:m, 0.6*m)
+    logit.fit = glm(F, data = train[indx,], family = "binomial") 
+    prob = predict(logit.fit, newdata = train[indx,], type = "response") 
+    pred = ROCR::prediction(prob, train$Survived[indx]) 
+    perf = performance(pred, measure = "acc") 
+    bestaccindx = perf@y.values %>% unlist() %>% which.max() 
+    bestcutoff = perf@x.values %>% unlist() %>% .[bestaccindx] 
+    
+    prob = predict(logit.fit, newdata = train[-indx,], type = "response") 
+    pred = ifelse(prob < bestcutoff, 0, 1) 
+    test.err = mean(pred != train$Survived[-indx])
+    est.test.err = test.err + est.test.err
+}
+
+print(paste("The estimated test error using this logistic fit is", 
+            round(est.test.err/5, digits = 4), sep = " "))
+
+logit.fit = glm(F, data = train, family = "binomial")
+
+summary(logit.fit)
+
+               
+```
+
+1.  We now have a model with the lowest estimated test error and with all terms significant to the model quality.
+2.  We save this model for future reference.
+
+```{r save-model}
+saveRDS(logit.fit, "../RDA/best.logit.Rda")
+
+```
+
