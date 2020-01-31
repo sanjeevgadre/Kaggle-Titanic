@@ -1,5 +1,8 @@
 # The *Titanic - Predict the Survivor* Challenge on www.kaggle.com
 
+## Update 2020-01-31
+The project is now implemented in Python too.
+
 ##  Introduction
 The Titanic disaster is part of the popular culture, spawning any number of books, movies and music; it also presents an excellent case study for applying machine learning algorithm to derive insights, both causal and inferential.
 
@@ -42,4 +45,5 @@ For each of the learning algorithm I estimated the test set prediction accuracy 
 ##  The Directory Structure
 The entire project is available either as a single markdown document `Titanic-Experiments-with-ML-algorithms.md` in the root directory or split into 5 sections, paralleling the discussion above, in the `/scripts` directory. The data, both input and output is in the `/data` directory. Finally the `/RDA` directory contains the RData created and used by the code in both the single document version and the 5-sections version.
 
-Now including Python codes
+### Update 2020-01-31
+Added `/Python/scripts/` that hosts the Python code. Additionally the `Python/wip-data` directory contains intermediate data files.
